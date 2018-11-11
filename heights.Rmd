@@ -1,0 +1,80 @@
+---
+title: 'Data Science: Heights'
+output:
+  html_document:
+    df_print: paged
+---
+
+How to predict sex using height.
+
+```{r}
+library(dslabs)
+library(caret)
+library(dplyr)
+library(purrr)
+data(heights)
+
+y <- heights$sex
+x <- heights$height
+```
+
+So we set y as the outcome(male or female) and x as the predictor. Having only one predictor is not the best scenario but we will try to make a algorithm that is better than just guessing.
+
+To create a machine learning alrogithm we will first separate our data into training set and test set.
+```{r}
+set.seed(2)
+test_index <- createDataPartition(y, times=1, p=0.5, list=FALSE)
+test_set <- heights[test_index,]
+train_set <- heights[-test_index,]
+```
+Now we will develop a algorithm using only the training set and then check how it is working using the test set.
+
+To start, let's just guess the outcome and see how good our accuracy is.
+
+```{r}
+y_hat <- sample(c("Male", "Female"), length(test_index), replace = TRUE) %>%
+  factor(levels = levels(test_set$sex))
+# check accuracy
+mean(y_hat == test_set$sex)
+```
+
+It is close to 50%, that's what we expected. Let's do it better, if we try to predict Male if height is within 2 standard deviations from the average male.
+
+```{r}
+y_hat <- ifelse(x > 62, "Male", "Female") %>% factor(levels = levels(test_set$sex))
+# Check accuracy
+mean(y_hat == test_set$sex)
+```
+Our accuracy goes up by almost 30%.
+
+We used 62 as our cutoff, but what if we use others cutoffs? Maybe we can get a better accuracy. Let's create a algorithm that will analyze the best cutoof for us.
+
+```{r}
+cutoff <- seq(61,70)
+accuracy <- map_dbl(cutoff, function(x){
+  y_hat <- ifelse(train_set$height > x, "Male", "Female") %>% 
+    factor(levels = levels(test_set$sex))
+  mean(y_hat == train_set$sex)
+})
+```
+
+We can see the accuracy for each cutoff with this plot 
+```{r}
+data.frame(accuracy, cutoff) %>% ggplot(aes(cutoff, accuracy)) + geom_point() + geom_line()
+```
+
+Now let's chose the best cutoff and test it.
+```{r}
+best_cutoff <- cutoff[which.max(accuracy)]
+y_hat <- ifelse(test_set$height > best_cutoff, "Male", "Female") %>% factor(levels = levels(test_set$sex))
+y_hat <- factor(y_hat)
+mean(y_hat == test_set$sex)
+```
+
+Now let's check how our accuracy is by creating a confusion matrix
+
+```{r}
+confusionMatrix(data = y_hat, reference = test_set$sex)
+```
+
+There is a problem when predicting the females. We can see that the average female is about 65 inches but our best cutoff is 64 for males! When checking the confusion matrix we can see the females have a low prediction rate(0.42) and males are way higher(0.93). This is why checking only the accuracy is not enough, because even though our accuracy is high, we are not predicting both outcomes equally.
